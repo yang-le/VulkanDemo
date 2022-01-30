@@ -127,10 +127,8 @@ private:
         vk::InstanceCreateInfo instInfo = vk::InstanceCreateInfo()
             .setFlags(vk::InstanceCreateFlags())
             .setPApplicationInfo(&appInfo)
-            .setEnabledExtensionCount(static_cast<uint32_t>(extensions.size()))
-            .setPpEnabledExtensionNames(extensions.data())
-            .setEnabledLayerCount(static_cast<uint32_t>(layers.size()))
-            .setPpEnabledLayerNames(layers.data());
+            .setPEnabledExtensionNames(extensions)
+            .setPEnabledLayerNames(layers);
 
         // Create the Vulkan instance.
         try {
@@ -234,20 +232,16 @@ private:
         for (unsigned int queueFamily : uniqueQueueFamilies) {
             vk::DeviceQueueCreateInfo queueCreateInfo = vk::DeviceQueueCreateInfo()
                 .setQueueFamilyIndex(indices.graphicsFamily.value())
-                .setQueueCount(1)
-                .setPQueuePriorities(&queuePriority);
+                .setQueuePriorities(queuePriority);
             queueCreateInfos.emplace_back(queueCreateInfo);
         }
 
         vk::PhysicalDeviceFeatures deviceFeatures = vk::PhysicalDeviceFeatures();
         vk::DeviceCreateInfo createInfo = vk::DeviceCreateInfo()
-            .setPQueueCreateInfos(queueCreateInfos.data())
-            .setQueueCreateInfoCount(static_cast<uint32_t>(queueCreateInfos.size()))
+            .setQueueCreateInfos(queueCreateInfos)
             .setPEnabledFeatures(&deviceFeatures)
-            .setEnabledLayerCount(static_cast<uint32_t>(layers.size()))
-            .setPpEnabledLayerNames(layers.data())
-            .setEnabledExtensionCount(static_cast<uint32_t>(deviceExtensions.size()))
-            .setPpEnabledExtensionNames(deviceExtensions.data());
+            .setPEnabledLayerNames(layers)
+            .setPEnabledExtensionNames(deviceExtensions);
         device = physicalDevice.createDevice(createInfo);
         graphicsQueue = device.getQueue(indices.graphicsFamily.value(), 0);
         presentQueue = device.getQueue(indices.presentFamily.value(), 0);
@@ -318,13 +312,12 @@ private:
             .setOldSwapchain(nullptr);
 
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
-        uint32_t queueFamilyIndices[] = {indices.graphicsFamily.value(), indices.presentFamily.value() };
+        std::vector<uint32_t> queueFamilyIndices = {indices.graphicsFamily.value(), indices.presentFamily.value() };
 
         if (indices.graphicsFamily != indices.presentFamily) {
             createInfo
                 .setImageSharingMode(vk::SharingMode::eConcurrent)
-                .setQueueFamilyIndexCount(2)
-                .setPQueueFamilyIndices(queueFamilyIndices);
+                .setQueueFamilyIndices(queueFamilyIndices);
         } else {
             createInfo.setImageSharingMode(vk::SharingMode::eExclusive);
         }
@@ -365,8 +358,7 @@ private:
 
         vk::SubpassDescription subpass = vk::SubpassDescription()
             .setPipelineBindPoint(vk::PipelineBindPoint::eGraphics)
-            .setColorAttachmentCount(1)
-            .setPColorAttachments(&colorAttachmentRef);
+            .setColorAttachments(colorAttachmentRef);
 
         vk::SubpassDependency dependency = vk::SubpassDependency()
             .setSrcSubpass(VK_SUBPASS_EXTERNAL)
@@ -377,12 +369,9 @@ private:
             .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite);
 
         vk::RenderPassCreateInfo renderPassInfo = vk::RenderPassCreateInfo()
-            .setAttachmentCount(1)
-            .setPAttachments(&colorAttachment)
-            .setSubpassCount(1)
-            .setPSubpasses(&subpass)
-            .setDependencyCount(1)
-            .setPDependencies(&dependency);
+            .setAttachments(colorAttachment)
+            .setSubpasses(subpass)
+            .setDependencies(dependency);
 
         renderPass = device.createRenderPass(renderPassInfo);
     }
@@ -430,7 +419,7 @@ private:
             .setModule(fragShaderModule)
             .setPName("main");
 
-        vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+        std::vector<vk::PipelineShaderStageCreateInfo> shaderStages = { vertShaderStageInfo, fragShaderStageInfo };
 
         vk::PipelineVertexInputStateCreateInfo vertexInputInfo = vk::PipelineVertexInputStateCreateInfo()
             .setVertexBindingDescriptionCount(0)
@@ -453,10 +442,8 @@ private:
             .setExtent(swapChainExtent);
 
         vk::PipelineViewportStateCreateInfo viewportState = vk::PipelineViewportStateCreateInfo()
-            .setViewportCount(1)
-            .setPViewports(&viewport)
-            .setScissorCount(1)
-            .setPScissors(&scissor);
+            .setViewports(viewport)
+            .setScissors(scissor);
 
         vk::PipelineRasterizationStateCreateInfo rasterizer = vk::PipelineRasterizationStateCreateInfo()
             .setDepthClampEnable(VK_FALSE)
@@ -477,20 +464,17 @@ private:
 
         vk::PipelineColorBlendStateCreateInfo colorBlending = vk::PipelineColorBlendStateCreateInfo()
             .setLogicOpEnable(VK_FALSE)
-            .setAttachmentCount(1)
-            .setPAttachments(&colorBlendAttachment);
+            .setAttachments(colorBlendAttachment);
 
-        vk::DynamicState dynamicStates[] = { vk::DynamicState::eViewport, vk::DynamicState::eLineWidth };
+        std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eLineWidth };
         vk::PipelineDynamicStateCreateInfo dynamicState = vk::PipelineDynamicStateCreateInfo()
-            .setDynamicStateCount(2)
-            .setPDynamicStates(dynamicStates);
+            .setDynamicStates(dynamicStates);
 
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo = vk::PipelineLayoutCreateInfo();
         pipelineLayout = device.createPipelineLayout(pipelineLayoutInfo);
 
         vk::GraphicsPipelineCreateInfo pipelineInfo = vk::GraphicsPipelineCreateInfo()
-            .setStageCount(2)
-            .setPStages(shaderStages)
+            .setStages(shaderStages)
             .setPVertexInputState(&vertexInputInfo)
             .setPInputAssemblyState(&inputAssembly)
             .setPViewportState(&viewportState)
@@ -513,8 +497,7 @@ private:
         for (const auto& swapChainImageView : swapChainImageViews) {
             vk::FramebufferCreateInfo framebufferInfo = vk::FramebufferCreateInfo()
                 .setRenderPass(renderPass)
-                .setAttachmentCount(1)
-                .setPAttachments(&swapChainImageView)
+                .setAttachments(swapChainImageView)
                 .setWidth(swapChainExtent.width)
                 .setHeight(swapChainExtent.height)
                 .setLayers(1);
@@ -535,7 +518,7 @@ private:
         vk::CommandBufferAllocateInfo allocInfo = vk::CommandBufferAllocateInfo()
             .setCommandPool(commandPool)
             .setLevel(vk::CommandBufferLevel::ePrimary)
-            .setCommandBufferCount(swapChainFrambuffers.size());
+            .setCommandBufferCount(static_cast<uint32_t>(swapChainFrambuffers.size()));
 
         commandBuffers = device.allocateCommandBuffers(allocInfo);
 
@@ -552,8 +535,7 @@ private:
                 .setRenderPass(renderPass)
                 .setFramebuffer(swapChainFrambuffers[i])
                 .setRenderArea({ {0, 0}, swapChainExtent })
-                .setClearValueCount(1)
-                .setPClearValues(&clearColor);
+                .setClearValues(clearColor);
 
             commandBuffers[i].beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
             commandBuffers[i].bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
@@ -595,32 +577,37 @@ private:
     }
 
     void drawFrame() {
-        device.waitForFences(1, &inFlightFences[currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
-        device.resetFences(1, &inFlightFences[currentFrame]);
+        vk::Result result = device.waitForFences(1, &inFlightFences[currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
+        if (result != vk::Result::eSuccess) {
+            throw std::runtime_error(vk::to_string(result));
+        }
 
-        uint32_t imageIndex = device.acquireNextImageKHR(swapChain, std::numeric_limits<uint64_t>::max(), imageAvailableSemaphores[currentFrame]);
+        result = device.resetFences(1, &inFlightFences[currentFrame]);
+        if (result != vk::Result::eSuccess) {
+            throw std::runtime_error(vk::to_string(result));
+        }
+
+        uint32_t imageIndex = device.acquireNextImageKHR(swapChain, std::numeric_limits<uint64_t>::max(), imageAvailableSemaphores[currentFrame]).value;
         
         vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
         vk::SubmitInfo submitInfo = vk::SubmitInfo()
-            .setWaitSemaphoreCount(1)
-            .setPWaitSemaphores(&imageAvailableSemaphores[currentFrame])
-            .setPWaitDstStageMask(&waitStage)
-            .setCommandBufferCount(1)
-            .setPCommandBuffers(&commandBuffers[imageIndex])
-            .setSignalSemaphoreCount(1)
-            .setPSignalSemaphores(&renderFinishSemaphores[currentFrame]);
+            .setWaitSemaphores(imageAvailableSemaphores[currentFrame])
+            .setWaitDstStageMask(waitStage)
+            .setCommandBuffers(commandBuffers[imageIndex])
+            .setSignalSemaphores(renderFinishSemaphores[currentFrame]);
 
         graphicsQueue.submit(submitInfo, inFlightFences[currentFrame]);
 
         vk::PresentInfoKHR presentInfo = vk::PresentInfoKHR()
-            .setWaitSemaphoreCount(1)
-            .setPWaitSemaphores(&renderFinishSemaphores[currentFrame])
-            .setSwapchainCount(1)
-            .setPSwapchains(&swapChain)
-            .setPImageIndices(&imageIndex);
+            .setWaitSemaphores(renderFinishSemaphores[currentFrame])
+            .setSwapchains(swapChain)
+            .setImageIndices(imageIndex);
 
-        presentQueue.presentKHR(presentInfo);
-        
+        result = presentQueue.presentKHR(presentInfo);
+        if (result != vk::Result::eSuccess) {
+            throw std::runtime_error(vk::to_string(result));
+        }
+
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
