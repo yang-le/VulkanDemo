@@ -38,7 +38,7 @@ Create and destroy a Vulkan surface on an SDL window.
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_syswm.h>
 #include <SDL2/SDL_vulkan.h>
-#include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_raii.hpp>
 
 #include <iostream>
 #include <vector>
@@ -59,27 +59,28 @@ private:
     const int MAX_FRAMES_IN_FLIGHT = 2;
     size_t currentFrame = 0;
 
+    vk::raii::Context context;
+
     SDL_Window* window = nullptr;
-    vk::Instance instance;
-    vk::PhysicalDevice physicalDevice;
-    vk::Device device;
-    vk::Queue graphicsQueue;
-    vk::Queue presentQueue;
-    vk::SurfaceKHR surface;
-    vk::SwapchainKHR swapChain;
-    std::vector<vk::Image> swapChainImages;
+    vk::raii::Instance instance = nullptr;
+    vk::raii::PhysicalDevice physicalDevice = nullptr;
+    vk::raii::Device device = nullptr;
+    vk::raii::Queue graphicsQueue = nullptr;
+    vk::raii::Queue presentQueue = nullptr;
+    vk::raii::SurfaceKHR surface = nullptr;
+    vk::raii::SwapchainKHR swapChain = nullptr;
     vk::Format swapChainImageFormat;
     vk::Extent2D swapChainExtent;
-    std::vector<vk::ImageView> swapChainImageViews;
-    vk::RenderPass renderPass;
-    vk::PipelineLayout pipelineLayout;
-    vk::Pipeline graphicsPipeline;
-    std::vector<vk::Framebuffer> swapChainFrambuffers;
-    vk::CommandPool commandPool;
-    std::vector<vk::CommandBuffer> commandBuffers;
-    std::vector<vk::Semaphore> imageAvailableSemaphores;
-    std::vector<vk::Semaphore> renderFinishSemaphores;
-    std::vector<vk::Fence> inFlightFences;
+    std::vector<vk::raii::ImageView> swapChainImageViews;
+    vk::raii::RenderPass renderPass = nullptr;
+    vk::raii::PipelineLayout pipelineLayout = nullptr;
+    vk::raii::Pipeline graphicsPipeline = nullptr;
+    std::vector<vk::raii::Framebuffer> swapChainFrambuffers;
+    vk::raii::CommandPool commandPool = nullptr;
+    std::vector<vk::raii::CommandBuffer> commandBuffers;
+    std::vector<vk::raii::Semaphore> imageAvailableSemaphores;
+    std::vector<vk::raii::Semaphore> renderFinishSemaphores;
+    std::vector<vk::raii::Fence> inFlightFences;
 
     std::vector<const char*> layers;
     const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
@@ -125,14 +126,13 @@ private:
         // vk::InstanceCreateInfo is where the programmer specifies the layers and/or extensions that
         // are needed.
         vk::InstanceCreateInfo instInfo = vk::InstanceCreateInfo()
-            .setFlags(vk::InstanceCreateFlags())
             .setPApplicationInfo(&appInfo)
             .setPEnabledExtensionNames(extensions)
             .setPEnabledLayerNames(layers);
 
         // Create the Vulkan instance.
         try {
-            instance = vk::createInstance(instInfo);
+            instance = vk::raii::Instance(context, instInfo);
         } catch(const std::exception& e) {
             std::cout << "Could not create a Vulkan instance: " << e.what() << std::endl;
         }
@@ -141,11 +141,11 @@ private:
     void createSurface() {
         // Create a Vulkan surface for rendering
         VkSurfaceKHR c_surface;
-        if (!SDL_Vulkan_CreateSurface(window, static_cast<VkInstance>(instance), &c_surface)) {
+        if (!SDL_Vulkan_CreateSurface(window, static_cast<VkInstance>(*instance), &c_surface)) {
             std::cout << "Could not create a Vulkan surface." << std::endl;
             return;
         }
-        surface = vk::SurfaceKHR(c_surface);
+        surface = vk::raii::SurfaceKHR(instance, c_surface);
     }
 
     struct QueueFamilyIndices {
@@ -157,7 +157,7 @@ private:
         }
     };
 
-    QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device) {
+    QueueFamilyIndices findQueueFamilies(const vk::raii::PhysicalDevice& device) {
         QueueFamilyIndices indices;
 
         int i = 0;
@@ -165,7 +165,7 @@ private:
             if (queue.queueFlags & vk::QueueFlagBits::eGraphics) {
                 indices.graphicsFamily = i;
             }
-            if (device.getSurfaceSupportKHR(i, surface)) {
+            if (device.getSurfaceSupportKHR(i, *surface)) {
                 indices.presentFamily = i;
             }
             if (indices.isComplete()) {
@@ -183,17 +183,17 @@ private:
         std::vector<vk::PresentModeKHR> presentModes;
     };
 
-    SwapChainSupportDetails querySwapChainSupport(const vk::PhysicalDevice& device) {
+    SwapChainSupportDetails querySwapChainSupport(const vk::raii::PhysicalDevice& device) {
         SwapChainSupportDetails details;
 
-        details.capabilities = device.getSurfaceCapabilitiesKHR(surface);
-        details.formats = device.getSurfaceFormatsKHR(surface);
-        details.presentModes = device.getSurfacePresentModesKHR(surface);
+        details.capabilities = device.getSurfaceCapabilitiesKHR(*surface);
+        details.formats = device.getSurfaceFormatsKHR(*surface);
+        details.presentModes = device.getSurfacePresentModesKHR(*surface);
 
         return details;
     }
 
-    bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device) {
+    bool checkDeviceExtensionSupport(const vk::raii::PhysicalDevice& device) {
         std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
 
         for (const auto& extension : device.enumerateDeviceExtensionProperties()) {
@@ -203,7 +203,7 @@ private:
         return requiredExtensions.empty();
     }
 
-    bool isDeviceSuitable(const vk::PhysicalDevice& device) {
+    bool isDeviceSuitable(const vk::raii::PhysicalDevice& device) {
         QueueFamilyIndices indices = findQueueFamilies(device);
         bool extensionsSupported = checkDeviceExtensionSupport(device);
         bool swapChainAdequate = false;
@@ -216,9 +216,9 @@ private:
     }
 
     void pickPhysicalDevice() {
-        for (const auto& device : instance.enumeratePhysicalDevices()) {
+        for (auto& device : vk::raii::PhysicalDevices(instance)) {
             if (isDeviceSuitable(device)) {
-                physicalDevice = device;
+                physicalDevice = std::move(device);
             }
         }
     }
@@ -230,21 +230,17 @@ private:
         std::set<unsigned int> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
         for (unsigned int queueFamily : uniqueQueueFamilies) {
-            vk::DeviceQueueCreateInfo queueCreateInfo = vk::DeviceQueueCreateInfo()
-                .setQueueFamilyIndex(indices.graphicsFamily.value())
-                .setQueuePriorities(queuePriority);
-            queueCreateInfos.emplace_back(queueCreateInfo);
+            queueCreateInfos.emplace_back(vk::DeviceQueueCreateFlags(), queueFamily, 1, &queuePriority);
         }
 
-        vk::PhysicalDeviceFeatures deviceFeatures = vk::PhysicalDeviceFeatures();
         vk::DeviceCreateInfo createInfo = vk::DeviceCreateInfo()
             .setQueueCreateInfos(queueCreateInfos)
-            .setPEnabledFeatures(&deviceFeatures)
             .setPEnabledLayerNames(layers)
             .setPEnabledExtensionNames(deviceExtensions);
-        device = physicalDevice.createDevice(createInfo);
-        graphicsQueue = device.getQueue(indices.graphicsFamily.value(), 0);
-        presentQueue = device.getQueue(indices.presentFamily.value(), 0);
+
+        device = vk::raii::Device(physicalDevice, createInfo);
+        graphicsQueue = vk::raii::Queue(device, indices.graphicsFamily.value(), 0);
+        presentQueue = vk::raii::Queue(device, indices.presentFamily.value(), 0);
     }
 
     vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats) {
@@ -298,7 +294,7 @@ private:
         }
 
         vk::SwapchainCreateInfoKHR createInfo = vk::SwapchainCreateInfoKHR()
-            .setSurface(surface)
+            .setSurface(*surface)
             .setMinImageCount(imageCount)
             .setImageFormat(surfaceFormat.format)
             .setImageColorSpace(surfaceFormat.colorSpace)
@@ -308,7 +304,7 @@ private:
             .setPreTransform(swapChainSupport.capabilities.currentTransform)
             .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque)
             .setPresentMode(presentMode)
-            .setClipped(VK_TRUE)
+            .setClipped(true)
             .setOldSwapchain(nullptr);
 
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
@@ -322,8 +318,7 @@ private:
             createInfo.setImageSharingMode(vk::SharingMode::eExclusive);
         }
 
-        swapChain = device.createSwapchainKHR(createInfo);
-        swapChainImages = device.getSwapchainImagesKHR(swapChain);
+        swapChain = vk::raii::SwapchainKHR(device, createInfo);
         swapChainImageFormat = surfaceFormat.format;
         swapChainExtent = extent;
     }
@@ -332,12 +327,11 @@ private:
         vk::ImageViewCreateInfo createInfo = vk::ImageViewCreateInfo()
             .setViewType(vk::ImageViewType::e2D)
             .setFormat(swapChainImageFormat)
-            .setComponents(vk::ComponentMapping())
-            .setSubresourceRange(vk::ImageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
+            .setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
 
-        for (const auto& swapChainImage : swapChainImages) {
+        for (const auto& swapChainImage : swapChain.getImages()) {
             createInfo.setImage(swapChainImage);
-            swapChainImageViews.emplace_back(device.createImageView(createInfo));
+            swapChainImageViews.emplace_back(device, createInfo);
         }
     }
 
@@ -373,7 +367,7 @@ private:
             .setSubpasses(subpass)
             .setDependencies(dependency);
 
-        renderPass = device.createRenderPass(renderPassInfo);
+        renderPass = vk::raii::RenderPass(device, renderPassInfo);
     }
 
     std::vector<char> readFile(const std::string& filename) {
@@ -394,29 +388,29 @@ private:
         return buffer;
     }
 
-    vk::ShaderModule createShaderModule(const std::vector<char>& code) {
+    vk::raii::ShaderModule createShaderModule(const std::vector<char>& code) {
         vk::ShaderModuleCreateInfo createInfo = vk::ShaderModuleCreateInfo()
             .setCodeSize(code.size())
             .setPCode(reinterpret_cast<const uint32_t*>(code.data()));
 
-        return device.createShaderModule(createInfo);
+        return vk::raii::ShaderModule(device, createInfo);
     }
 
     void createGraphicsPipeline() {
         auto vertShaderCode = readFile("vert.spv");
         auto fragShaderCode = readFile("frag.spv");
 
-        vk::ShaderModule vertShaderModule = createShaderModule(vertShaderCode);
-        vk::ShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+        vk::raii::ShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+        vk::raii::ShaderModule fragShaderModule = createShaderModule(fragShaderCode);
 
         vk::PipelineShaderStageCreateInfo vertShaderStageInfo = vk::PipelineShaderStageCreateInfo()
             .setStage(vk::ShaderStageFlagBits::eVertex)
-            .setModule(vertShaderModule)
+            .setModule(*vertShaderModule)
             .setPName("main");
 
         vk::PipelineShaderStageCreateInfo fragShaderStageInfo = vk::PipelineShaderStageCreateInfo()
             .setStage(vk::ShaderStageFlagBits::eFragment)
-            .setModule(fragShaderModule)
+            .setModule(*fragShaderModule)
             .setPName("main");
 
         std::vector<vk::PipelineShaderStageCreateInfo> shaderStages = { vertShaderStageInfo, fragShaderStageInfo };
@@ -471,7 +465,7 @@ private:
             .setDynamicStates(dynamicStates);
 
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo = vk::PipelineLayoutCreateInfo();
-        pipelineLayout = device.createPipelineLayout(pipelineLayoutInfo);
+        pipelineLayout = vk::raii::PipelineLayout(device, pipelineLayoutInfo);
 
         vk::GraphicsPipelineCreateInfo pipelineInfo = vk::GraphicsPipelineCreateInfo()
             .setStages(shaderStages)
@@ -481,28 +475,23 @@ private:
             .setPRasterizationState(&rasterizer)
             .setPMultisampleState(&multisampling)
             .setPColorBlendState(&colorBlending)
-            .setLayout(pipelineLayout)
-            .setRenderPass(renderPass)
+            .setLayout(*pipelineLayout)
+            .setRenderPass(*renderPass)
             .setSubpass(0);
-
-        vk::PipelineCache pipelineCache = vk::PipelineCache();
         
-        graphicsPipeline = device.createGraphicsPipeline(pipelineCache, pipelineInfo).value;
-
-        device.destroyShaderModule(fragShaderModule);
-        device.destroyShaderModule(vertShaderModule);
+        graphicsPipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
     }
 
     void createFramebuffers() {
         for (const auto& swapChainImageView : swapChainImageViews) {
             vk::FramebufferCreateInfo framebufferInfo = vk::FramebufferCreateInfo()
-                .setRenderPass(renderPass)
-                .setAttachments(swapChainImageView)
+                .setRenderPass(*renderPass)
+                .setAttachments(*swapChainImageView)
                 .setWidth(swapChainExtent.width)
                 .setHeight(swapChainExtent.height)
                 .setLayers(1);
 
-            swapChainFrambuffers.emplace_back(device.createFramebuffer(framebufferInfo));
+            swapChainFrambuffers.emplace_back(device, framebufferInfo);
         }
     }
 
@@ -516,11 +505,11 @@ private:
 
     void createCommandBuffers() {
         vk::CommandBufferAllocateInfo allocInfo = vk::CommandBufferAllocateInfo()
-            .setCommandPool(commandPool)
+            .setCommandPool(*commandPool)
             .setLevel(vk::CommandBufferLevel::ePrimary)
             .setCommandBufferCount(static_cast<uint32_t>(swapChainFrambuffers.size()));
 
-        commandBuffers = device.allocateCommandBuffers(allocInfo);
+        commandBuffers = vk::raii::CommandBuffers(device, allocInfo);
 
         vk::CommandBufferBeginInfo beginInfo = vk::CommandBufferBeginInfo()
             .setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse);
@@ -532,13 +521,13 @@ private:
             commandBuffers[i].begin(beginInfo);
 
             vk::RenderPassBeginInfo renderPassInfo = vk::RenderPassBeginInfo()
-                .setRenderPass(renderPass)
-                .setFramebuffer(swapChainFrambuffers[i])
+                .setRenderPass(*renderPass)
+                .setFramebuffer(*swapChainFrambuffers[i])
                 .setRenderArea({ {0, 0}, swapChainExtent })
                 .setClearValues(clearColor);
 
             commandBuffers[i].beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-            commandBuffers[i].bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+            commandBuffers[i].bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
             commandBuffers[i].draw(3, 1, 0, 0);
             commandBuffers[i].endRenderPass();
 
@@ -552,9 +541,9 @@ private:
             .setFlags(vk::FenceCreateFlagBits::eSignaled);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-            imageAvailableSemaphores.emplace_back(device.createSemaphore(semaphoreInfo));
-            renderFinishSemaphores.emplace_back(device.createSemaphore(semaphoreInfo));
-            inFlightFences.emplace_back(device.createFence(fenceInfo));
+            imageAvailableSemaphores.emplace_back(device, semaphoreInfo);
+            renderFinishSemaphores.emplace_back(device, semaphoreInfo);
+            inFlightFences.emplace_back(device, fenceInfo);
         }
     }
 
@@ -577,30 +566,27 @@ private:
     }
 
     void drawFrame() {
-        vk::Result result = device.waitForFences(1, &inFlightFences[currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
+        vk::Result result = device.waitForFences(*inFlightFences[currentFrame], true, std::numeric_limits<uint64_t>::max());
         if (result != vk::Result::eSuccess) {
             throw std::runtime_error(vk::to_string(result));
         }
 
-        result = device.resetFences(1, &inFlightFences[currentFrame]);
-        if (result != vk::Result::eSuccess) {
-            throw std::runtime_error(vk::to_string(result));
-        }
+        device.resetFences(*inFlightFences[currentFrame]);
 
-        uint32_t imageIndex = device.acquireNextImageKHR(swapChain, std::numeric_limits<uint64_t>::max(), imageAvailableSemaphores[currentFrame]).value;
+        auto [_, imageIndex] = swapChain.acquireNextImage(std::numeric_limits<uint64_t>::max(), *imageAvailableSemaphores[currentFrame]);
         
         vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
         vk::SubmitInfo submitInfo = vk::SubmitInfo()
-            .setWaitSemaphores(imageAvailableSemaphores[currentFrame])
+            .setWaitSemaphores(*imageAvailableSemaphores[currentFrame])
             .setWaitDstStageMask(waitStage)
-            .setCommandBuffers(commandBuffers[imageIndex])
-            .setSignalSemaphores(renderFinishSemaphores[currentFrame]);
+            .setCommandBuffers(*commandBuffers[imageIndex])
+            .setSignalSemaphores(*renderFinishSemaphores[currentFrame]);
 
-        graphicsQueue.submit(submitInfo, inFlightFences[currentFrame]);
+        graphicsQueue.submit(submitInfo, *inFlightFences[currentFrame]);
 
         vk::PresentInfoKHR presentInfo = vk::PresentInfoKHR()
-            .setWaitSemaphores(renderFinishSemaphores[currentFrame])
-            .setSwapchains(swapChain)
+            .setWaitSemaphores(*renderFinishSemaphores[currentFrame])
+            .setSwapchains(*swapChain)
             .setImageIndices(imageIndex);
 
         result = presentQueue.presentKHR(presentInfo);
@@ -636,29 +622,6 @@ private:
     }
 
     void cleanUp() {
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-            device.destroyFence(inFlightFences[i]);
-            device.destroySemaphore(renderFinishSemaphores[i]);
-            device.destroySemaphore(imageAvailableSemaphores[i]);
-        }
-        device.destroyCommandPool(commandPool);
-        for (const auto& framebuffer : swapChainFrambuffers) {
-            device.destroyFramebuffer(framebuffer);
-        }
-        device.destroyPipeline(graphicsPipeline);
-        device.destroyPipelineLayout(pipelineLayout);
-        device.destroyRenderPass(renderPass);
-        for (const auto& imageView : swapChainImageViews) {
-            device.destroyImageView(imageView);
-        }
-        device.destroySwapchainKHR(swapChain);
-        device.destroy();
-    #if defined(_DEBUG)
-        instance.destroyDebugUtilsMessengerEXT(debugMessager, nullptr, vk::DispatchLoaderDynamic(static_cast<VkInstance>(instance), vkGetInstanceProcAddr));
-    #endif
-        instance.destroySurfaceKHR(surface);
-        instance.destroy();
-
         SDL_DestroyWindow(window);
         SDL_Quit();
     }
@@ -669,7 +632,7 @@ private:
             .setMessageSeverity(vk::DebugUtilsMessageSeverityFlagBitsEXT::eError | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo /*| vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose*/)
             .setMessageType(vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation)
             .setPfnUserCallback(debugCallback);
-        debugMessager = instance.createDebugUtilsMessengerEXT(debugInfo, nullptr, vk::DispatchLoaderDynamic(static_cast<VkInstance>(instance), vkGetInstanceProcAddr));
+        debugMessager = vk::raii::DebugUtilsMessengerEXT(instance, debugInfo);
     }
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -685,7 +648,7 @@ private:
         return VK_FALSE;
     }
 
-    vk::DebugUtilsMessengerEXT debugMessager;
+    vk::raii::DebugUtilsMessengerEXT debugMessager = nullptr;
 #endif
 };
 
